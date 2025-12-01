@@ -5,13 +5,14 @@ import { RefreshCw, Zap, ExternalLink, AlertCircle, MapPin, AlertTriangle, Packa
 const STORE_NAME = 'IBericaStore';
 const PRODUCT_NAME_MAP = {
   'Evilgoods_15913': 'Crema EvilGoods'
+  // Si tienes más productos con nombres largos, agrega sus SKUs aquí
 };
 
 // DICCIONARIO DE INCIDENCIAS
 const INCIDENCE_MAP = {
   'AS': 'Destinatario Ausente',
   'NAM': 'No Acepta Mercancía (Rechazado)',
-  'RD': 'Pendiente de recoger en Tipsa', // Texto para la etiqueta en la web
+  'RD': 'Pendiente de recoger en Tipsa',
   'FD': 'Dirección Incorrecta o Faltan Datos',
   'EAD': 'Entrega Aplazada por Destinatario',
   'DI': 'Dirección Incompleta',
@@ -20,9 +21,11 @@ const INCIDENCE_MAP = {
   'FE': 'Festivo Local o Fuerza Mayor'
 };
 
+// Función auxiliar para obtener el nombre "bonito" del producto
 const getNombreProducto = (item) => {
   const sku = item.product?.sku || '';
   const original = item.product?.name || 'Producto';
+  // Si el SKU está en el mapa, usa el nombre corto; si no, usa el original
   return PRODUCT_NAME_MAP[sku] ? PRODUCT_NAME_MAP[sku] : original;
 };
 
@@ -44,6 +47,7 @@ const generarMensajePedido = (order) => {
   const customer = order.customer;
   const tieneDir = !!(customer && customer.address);
   
+  // SIN EMOJIS, SOLO TEXTO
   let msg = `*GRACIAS POR TU COMPRA EN ${STORE_NAME.toUpperCase()}*\n\n`;
   msg += `¡Hola, ${nombre}!\n\n`;
   msg += `Te confirmamos que hemos recibido tu pedido que incluye lo siguiente:\n${productos}\n\n`;
@@ -67,8 +71,10 @@ const generarMensajePedido = (order) => {
 // --- GENERADOR MENSAJE: INCIDENCIA ---
 const generarMensajeIncidencia = (order) => {
   const nombre = order.customer?.full_name || 'Cliente';
-  // Lista de productos en una línea para incidencias (según tu ejemplo)
-  const productos = order.items.map(item => `${item.product?.name || 'Producto'}`).join(' | ');
+  
+  // CORRECCIÓN: Ahora usamos getNombreProducto aquí también
+  const productos = order.items.map(item => `${getNombreProducto(item)}`).join(' | ');
+  
   const total = formatearPrecio(order.total_amount);
   
   let motivoReal = "Incidencia en entrega";
@@ -79,25 +85,23 @@ const generarMensajeIncidencia = (order) => {
     motivoReal = INCIDENCE_MAP[codigo] || `Incidencia (${codigo})`;
   }
 
-  // --- CABECERA COMÚN ---
+  // MENSAJE LIMPIO SIN EMOJIS
   let msg = `*¡Hola, ${nombre}!*\n\n`;
   msg += `Soy Inés, le escribimos desde la tienda *${STORE_NAME.toUpperCase()}*\n\n`;
   msg += `Nos comunicamos porque han intentado entregar su pedido sin éxito.\n\n`;
-
-  // --- CUERPO DIFERENCIADO POR TIPO ---
+  
+  msg += `Motivo: ${motivoReal}\n\n`;
+  
+  msg += `¿Ha tenido algún inconveniente para recibirlo?\n\n`;
+  
   if (codigo === 'RD') {
-      // CASO ESPECIAL: RECOGER EN DELEGACIÓN (Sin preguntas, directo al grano)
-      msg += `📦 Su pedido está pendiente de recoger en la oficina de Tipsa.\n\n`;
+      msg += `Su pedido está pendiente de recoger en la oficina de Tipsa.\n\n`;
   } else {
-      // CASO ESTÁNDAR: AUSENTE, DIRECCIÓN INCORRECTA, ETC.
-      msg += `📌 Motivo: ${motivoReal}\n\n`;
-      msg += `¿Ha tenido algún inconveniente para recibirlo?\n\n`;
-      msg += `📦 Podemos gestionar una nueva entrega en un plazo de 48 horas (fines de semana y festivos no incluidos).\n\n`;
+      msg += `Podemos gestionar una nueva entrega en un plazo de 48 horas (fines de semana y festivos no incluidos).\n\n`;
       msg += `¿Podéis decir qué día puede recibir vuestra entrega?\n\n`;
   }
   
-  // --- CIERRE COMÚN ---
-  msg += `🛍 Tu pedido: ${productos}\n\n`;
+  msg += `Tu pedido: ${productos}\n\n`;
   msg += `Total: ${total} €`;
 
   return { msg, telefono: order.customer?.phone?.replace('+', ''), motivo: motivoReal };
@@ -127,13 +131,12 @@ function App() {
         let finalData = data;
 
         if (activeTab === 'incidence') {
-            // FILTRO ESTRICTO: Solo PENDING y CLIENT_MANAGED
+            // Filtro estricto: PENDING y CLIENT_MANAGED
             finalData = finalData.filter(order => {
                 const status = order.issues?.status;
                 return status === 'PENDING' || status === 'CLIENT_MANAGED';
             });
 
-            // Ordenar por fecha de actualización (lo más reciente arriba)
             finalData.sort((a, b) => {
                 const dateA = a.updated_at ? new Date(a.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + a.updated_at.split(" ")[1]) : new Date(0);
                 const dateB = b.updated_at ? new Date(b.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + b.updated_at.split(" ")[1]) : new Date(0);
@@ -262,6 +265,7 @@ function App() {
 
                    if (isIncidence && order.issues) {
                       const issue = order.issues;
+                      // Aquí se llama a la función corregida de incidencias
                       const { motivo } = generarMensajeIncidencia(order);
                       motivoDisplay = motivo;
                       esGestionCliente = issue.status === 'CLIENT_MANAGED';
