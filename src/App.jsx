@@ -125,20 +125,22 @@ function App() {
       if (data.error) throw new Error(data.error);
 
       if (Array.isArray(data)) {
-        if (activeTab === 'incidence') {
-            data.sort((a, b) => {
-                const statusA = a.issues?.status === 'PENDING' ? 0 : 1;
-                const statusB = b.issues?.status === 'PENDING' ? 0 : 1;
-                
-                if (statusA !== statusB) return statusA - statusB;
+        let finalData = data;
 
+        if (activeTab === 'incidence') {
+            // 1. FILTRAR: Solo mostrar las que están PENDING (rojo)
+            // Cualquier cosa que sea 'SOLUTION_SEND' o 'CLIENT_MANAGED' se descarta
+            finalData = finalData.filter(order => order.issues?.status === 'PENDING');
+
+            // 2. ORDENAR: Por fecha de actualización (más reciente arriba)
+            finalData.sort((a, b) => {
                 const dateA = a.updated_at ? new Date(a.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + a.updated_at.split(" ")[1]) : new Date(0);
                 const dateB = b.updated_at ? new Date(b.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + b.updated_at.split(" ")[1]) : new Date(0);
                 
                 return dateB - dateA;
             });
         }
-        setOrders(data);
+        setOrders(finalData);
       } else {
         setOrders([]);
       }
@@ -241,7 +243,7 @@ function App() {
                 {orders.length === 0 && !loading && !error && (
                   <tr>
                     <td colSpan="6" className="p-8 text-center text-gray-500">
-                      {activeTab === 'pending' ? 'No hay pedidos pendientes.' : 'No hay incidencias activas.'}
+                      {activeTab === 'pending' ? 'No hay pedidos pendientes.' : 'No hay incidencias activas (PENDING).'}
                     </td>
                   </tr>
                 )}
