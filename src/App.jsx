@@ -11,7 +11,7 @@ const PRODUCT_NAME_MAP = {
 const INCIDENCE_MAP = {
   'AS': 'Destinatario Ausente',
   'NAM': 'No Acepta Mercancía (Rechazado)',
-  'RD': 'Pendiente de recoger en Tipsa', // Ajustado a tu captura
+  'RD': 'Pendiente de recoger en Tipsa',
   'FD': 'Dirección Incorrecta o Faltan Datos',
   'EAD': 'Entrega Aplazada por Destinatario',
   'DI': 'Dirección Incompleta',
@@ -36,7 +36,7 @@ const formatearPrecio = (amount) => {
   return amount ? amount.toFixed(2).replace('.', ',') : '0,00';
 };
 
-// --- GENERADOR MENSAJE: PEDIDO NUEVO ---
+// --- GENERADORES DE MENSAJES ---
 const generarMensajePedido = (order) => {
   const nombre = order.customer?.full_name || 'Cliente';
   const productos = order.items.map(item => `${item.quantity} x ${getNombreProducto(item)}`).join('\n');
@@ -47,7 +47,7 @@ const generarMensajePedido = (order) => {
   let msg = `*GRACIAS POR TU COMPRA EN ${STORE_NAME.toUpperCase()}*\n\n`;
   msg += `¡Hola, ${nombre}!\n\n`;
   msg += `Te confirmamos que hemos recibido tu pedido que incluye lo siguiente:\n${productos}\n\n`;
-  msg += `Total: ${total} €\n\n`; // Formato español
+  msg += `Total: ${total} €\n\n`; 
   
   if (tieneDir) {
     msg += `Lo enviaremos a:\n`;
@@ -64,10 +64,8 @@ const generarMensajePedido = (order) => {
   return { msg, telefono: customer?.phone?.replace('+', ''), tieneDir };
 };
 
-// --- GENERADOR MENSAJE: INCIDENCIA (FORMATO EXACTO FOTO) ---
 const generarMensajeIncidencia = (order) => {
   const nombre = order.customer?.full_name || 'Cliente';
-  // Lista de productos limpia
   const productos = order.items.map(item => `${item.product?.name || 'Producto'}`).join(' | ');
   const total = formatearPrecio(order.total_amount);
   
@@ -79,15 +77,10 @@ const generarMensajeIncidencia = (order) => {
     motivoReal = INCIDENCE_MAP[codigo] || `Incidencia (${codigo})`;
   }
 
-  // ESTRUCTURA IDÉNTICA A TU CAPTURA "BUENA"
   let msg = `*¡Hola, ${nombre}!*\n\n`;
-  
   msg += `Soy Inés, le escribimos desde la tienda *${STORE_NAME.toUpperCase()}*\n\n`;
-  
   msg += `Nos comunicamos porque han intentado entregar su pedido sin éxito.\n\n`;
-  
   msg += `📌 Motivo: ${motivoReal}\n\n`;
-  
   msg += `¿Ha tenido algún inconveniente para recibirlo?\n\n`;
   
   if (codigo === 'RD') {
@@ -98,7 +91,6 @@ const generarMensajeIncidencia = (order) => {
   }
   
   msg += `🛍 Tu pedido: ${productos}\n\n`;
-  
   msg += `Total: ${total} €`;
 
   return { msg, telefono: order.customer?.phone?.replace('+', ''), motivo: motivoReal };
@@ -127,16 +119,15 @@ function App() {
       if (Array.isArray(data)) {
         let finalData = data;
 
+        // FILTRO ESTRICTO: Si es incidencia, SOLO mostrar las PENDING.
+        // Todo lo demás ("SOLUTION_SEND", "CLIENT_MANAGED") se borra de la lista.
         if (activeTab === 'incidence') {
-            // 1. FILTRAR: Solo mostrar las que están PENDING (rojo)
-            // Cualquier cosa que sea 'SOLUTION_SEND' o 'CLIENT_MANAGED' se descarta
-            finalData = finalData.filter(order => order.issues?.status === 'PENDING');
+            finalData = finalData.filter(order => order.issues && order.issues.status === 'PENDING');
 
-            // 2. ORDENAR: Por fecha de actualización (más reciente arriba)
+            // Ordenar por fecha de actualización (lo más reciente arriba)
             finalData.sort((a, b) => {
                 const dateA = a.updated_at ? new Date(a.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + a.updated_at.split(" ")[1]) : new Date(0);
                 const dateB = b.updated_at ? new Date(b.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + b.updated_at.split(" ")[1]) : new Date(0);
-                
                 return dateB - dateA;
             });
         }
@@ -243,7 +234,7 @@ function App() {
                 {orders.length === 0 && !loading && !error && (
                   <tr>
                     <td colSpan="6" className="p-8 text-center text-gray-500">
-                      {activeTab === 'pending' ? 'No hay pedidos pendientes.' : 'No hay incidencias activas (PENDING).'}
+                      {activeTab === 'pending' ? 'No hay pedidos pendientes.' : '¡Todo limpio! No hay incidencias que requieran acción.'}
                     </td>
                   </tr>
                 )}
@@ -258,15 +249,11 @@ function App() {
                    
                    // Lógica Incidencia
                    let motivoDisplay = null;
-                   let issueStatus = null;
-                   let requiereAccion = false;
-
+                   
                    if (isIncidence && order.issues) {
                       const issue = order.issues;
                       const { motivo } = generarMensajeIncidencia(order);
                       motivoDisplay = motivo;
-                      issueStatus = issue.status;
-                      requiereAccion = issueStatus === 'PENDING';
                    }
 
                    return (
@@ -314,20 +301,13 @@ function App() {
                              </div>
                            )
                         ) : (
-                          // MODO INCIDENCIA
+                          // MODO INCIDENCIA (Solo PENDING llega aquí por el filtro)
                           <div className="space-y-2">
-                            {requiereAccion ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
-                                    <AlertTriangle className="w-3 h-3" /> REQUIERE ACCIÓN
-                                </span>
-                            ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-200">
-                                    {issueStatus === 'SOLUTION_SEND' ? <CheckCircle className="w-3 h-3"/> : <Clock className="w-3 h-3"/>}
-                                    {issueStatus === 'SOLUTION_SEND' ? 'Solución Enviada' : 'Gestionado'}
-                                </span>
-                            )}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
+                                <AlertTriangle className="w-3 h-3" /> REQUIERE ACCIÓN
+                            </span>
                             
-                            <div className={`border p-2 rounded-lg text-sm font-semibold shadow-sm flex items-start gap-2 ${requiereAccion ? 'bg-orange-50 border-orange-200 text-orange-900' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                            <div className="border p-2 rounded-lg text-sm font-semibold shadow-sm flex items-start gap-2 bg-orange-50 border-orange-200 text-orange-900">
                                 <span>{motivoDisplay}</span>
                             </div>
                           </div>
@@ -358,11 +338,7 @@ function App() {
                         {order.customer?.phone ? (
                           <button 
                             onClick={() => enviarWhatsApp(order)}
-                            className={`text-white text-sm px-4 py-3 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 w-full hover:shadow-lg ${
-                                isIncidence && !requiereAccion 
-                                ? 'bg-gray-400 hover:bg-gray-500' 
-                                : 'bg-green-500 hover:bg-green-600'
-                            }`}
+                            className="bg-green-500 hover:bg-green-600 text-white text-sm px-4 py-3 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 w-full hover:shadow-lg"
                           >
                             <ExternalLink className="w-4 h-4" /> WA {isIncidence ? 'Incidencia' : ''}
                           </button>
