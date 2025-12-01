@@ -139,7 +139,7 @@ function App() {
                 <tr>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-24">Fecha / ID</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-48">Cliente</th>
-                  <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-64">Dirección</th> {/* Nueva Columna */}
+                  <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider w-64">Dirección</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Productos</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total</th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-32">Acción</th>
@@ -156,6 +156,11 @@ function App() {
                 
                 {orders.map((order) => {
                    const { tieneDir } = generarMensaje(order);
+                   
+                   // Generamos la URL de Google Maps dinámicamente
+                   const direccionBusqueda = `${order.customer?.address} ${order.customer?.city} ${order.customer?.zip}`;
+                   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccionBusqueda)}`;
+
                    return (
                     <tr key={order.id} className={`hover:bg-blue-50 transition-colors ${!tieneDir ? 'bg-red-50' : ''}`}>
                       
@@ -174,18 +179,44 @@ function App() {
                         <div className="text-sm text-blue-600 font-mono mb-2">{order.customer?.phone}</div>
                       </td>
 
-                      {/* COLUMNA 3: DIRECCIÓN (NUEVA COLUMNA) */}
+                      {/* COLUMNA 3: DIRECCIÓN (MAPS + DISTRITO POSTAL) */}
                       <td className="p-4 align-top">
                         {tieneDir ? (
-                           <div className="bg-gray-50 border border-gray-200 rounded p-2 text-xs text-gray-600 shadow-sm">
-                              <div className="flex items-start gap-1">
-                                <MapPin className="w-3 h-3 mt-0.5 text-gray-400 flex-shrink-0" />
-                                <div>
-                                  <p className="font-semibold text-gray-800">{order.customer.address}</p>
-                                  <p>{order.customer.city}, {order.customer.state}</p>
-                                  <p className="text-gray-400">{order.customer.zip}</p>
-                                </div>
-                              </div>
+                           <div className="flex items-start gap-2">
+                             {/* Tarjeta Google Maps */}
+                             <a 
+                               href={mapsUrl} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="block group flex-1"
+                               title="Ver en Google Maps"
+                             >
+                               <div className="bg-gray-50 border border-gray-200 rounded p-2 text-xs text-gray-600 shadow-sm group-hover:bg-blue-100 group-hover:border-blue-300 transition-all cursor-pointer h-full">
+                                  <div className="flex items-start gap-1">
+                                    <MapPin className="w-3 h-3 mt-0.5 text-gray-400 flex-shrink-0 group-hover:text-blue-600" />
+                                    <div>
+                                      <p className="font-semibold text-gray-800 group-hover:text-blue-800 underline decoration-dotted underline-offset-2 break-words">{order.customer.address}</p>
+                                      <p>{order.customer.city}, {order.customer.state}</p>
+                                      <p className="text-gray-400">{order.customer.zip}</p>
+                                    </div>
+                                  </div>
+                               </div>
+                             </a>
+
+                             {/* Botón Distrito Postal */}
+                             <a 
+                               href="https://distritopostal.es/"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               className="flex items-center justify-center p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm h-10 w-10 flex-shrink-0"
+                               title="Verificar en Distrito Postal"
+                             >
+                               <img 
+                                 src="https://www.google.com/s2/favicons?domain=distritopostal.es&sz=32" 
+                                 alt="DP" 
+                                 className="w-5 h-5 opacity-70 hover:opacity-100" 
+                               />
+                             </a>
                            </div>
                         ) : (
                            <div className="inline-flex items-center gap-1 px-3 py-1 rounded bg-red-100 text-red-700 border border-red-200 text-xs font-bold shadow-sm">
@@ -236,7 +267,7 @@ function App() {
         </div>
         
         <div className="mt-6 text-center text-xs text-gray-400">
-           Sistema interno de {STORE_NAME} • Desarrollado con ❤️ por 341
+           Sistema interno de {STORE_NAME} • Desarrollado con Vercel
         </div>
       </div>
     </div>
