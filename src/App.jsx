@@ -11,12 +11,12 @@ const PRODUCT_NAME_MAP = {
 const INCIDENCE_MAP = {
   'AS': 'Destinatario Ausente',
   'NAM': 'No Acepta Mercancía (Rechazado)',
-  'RD': 'Pendiente de Recoger en Delegación',
+  'RD': 'Pendiente de recoger en Tipsa', // Ajustado a tu captura
   'FD': 'Dirección Incorrecta o Faltan Datos',
   'EAD': 'Entrega Aplazada por Destinatario',
   'DI': 'Dirección Incompleta',
   'DO': 'Dirección Desconocida',
-  'EPA': 'En Reparto (Incidencia leve)',
+  'EPA': 'En Reparto',
   'FE': 'Festivo Local o Fuerza Mayor'
 };
 
@@ -32,18 +32,22 @@ const formatearFecha = (dateString) => {
   return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateString;
 };
 
+const formatearPrecio = (amount) => {
+  return amount ? amount.toFixed(2).replace('.', ',') : '0,00';
+};
+
 // --- GENERADOR MENSAJE: PEDIDO NUEVO ---
 const generarMensajePedido = (order) => {
   const nombre = order.customer?.full_name || 'Cliente';
   const productos = order.items.map(item => `${item.quantity} x ${getNombreProducto(item)}`).join('\n');
-  const total = (order.total_amount || 0).toFixed(2);
+  const total = formatearPrecio(order.total_amount);
   const customer = order.customer;
   const tieneDir = !!(customer && customer.address);
   
   let msg = `*GRACIAS POR TU COMPRA EN ${STORE_NAME.toUpperCase()}*\n\n`;
   msg += `¡Hola, ${nombre}!\n\n`;
   msg += `Te confirmamos que hemos recibido tu pedido que incluye lo siguiente:\n${productos}\n\n`;
-  msg += `Total: € ${total}\n\n`;
+  msg += `Total: ${total} €\n\n`; // Formato español
   
   if (tieneDir) {
     msg += `Lo enviaremos a:\n`;
@@ -60,36 +64,42 @@ const generarMensajePedido = (order) => {
   return { msg, telefono: customer?.phone?.replace('+', ''), tieneDir };
 };
 
-// --- GENERADOR MENSAJE: INCIDENCIA ---
+// --- GENERADOR MENSAJE: INCIDENCIA (FORMATO EXACTO FOTO) ---
 const generarMensajeIncidencia = (order) => {
   const nombre = order.customer?.full_name || 'Cliente';
-  const productos = order.items.map(item => `${item.quantity} x ${getNombreProducto(item)}`).join('\n');
-  const total = (order.total_amount || 0).toFixed(2);
+  // Lista de productos limpia
+  const productos = order.items.map(item => `${item.product?.name || 'Producto'}`).join(' | ');
+  const total = formatearPrecio(order.total_amount);
   
   let motivoReal = "Incidencia en entrega";
   let codigo = "UNK";
 
-  // CORRECCIÓN: Tratamos issues como objeto, no lista
   if (order.issues) {
     codigo = order.issues.incidence_code;
     motivoReal = INCIDENCE_MAP[codigo] || `Incidencia (${codigo})`;
   }
 
-  let msg = `¡Hola, ${nombre}!\n\n`;
-  msg += `Soy Inés, le escribimos desde la tienda ${STORE_NAME.toUpperCase()} 📦\n\n`;
+  // ESTRUCTURA IDÉNTICA A TU CAPTURA "BUENA"
+  let msg = `*¡Hola, ${nombre}!*\n\n`;
+  
+  msg += `Soy Inés, le escribimos desde la tienda *${STORE_NAME.toUpperCase()}*\n\n`;
+  
   msg += `Nos comunicamos porque han intentado entregar su pedido sin éxito.\n\n`;
-  msg += `📌 Motivo: *${motivoReal}*\n\n`;
+  
+  msg += `📌 Motivo: ${motivoReal}\n\n`;
+  
   msg += `¿Ha tenido algún inconveniente para recibirlo?\n\n`;
   
   if (codigo === 'RD') {
-      msg += `📦 Su pedido está disponible para recoger en la oficina de mensajería.\n\n`;
+      msg += `📦 Su pedido está pendiente de recoger en la oficina de Tipsa.\n\n`;
   } else {
       msg += `📦 Podemos gestionar una nueva entrega en un plazo de 48 horas (fines de semana y festivos no incluidos).\n\n`;
-      msg += `¿Podéis decir qué día puede recibir vuestra entrega?\n\n`;
+      msg += `Podéis decir qué día puede recibir vuestra entrega?\n\n`;
   }
   
-  msg += `🛍 Tu pedido:\n${productos}\n\n`;
-  msg += `Total: € ${total}`;
+  msg += `🛍 Tu pedido: ${productos}\n\n`;
+  
+  msg += `Total: ${total} €`;
 
   return { msg, telefono: order.customer?.phone?.replace('+', ''), motivo: motivoReal };
 };
@@ -115,12 +125,17 @@ function App() {
       if (data.error) throw new Error(data.error);
 
       if (Array.isArray(data)) {
-        // CORRECCIÓN: Ordenamos leyendo status directamente del objeto issues
         if (activeTab === 'incidence') {
             data.sort((a, b) => {
                 const statusA = a.issues?.status === 'PENDING' ? 0 : 1;
                 const statusB = b.issues?.status === 'PENDING' ? 0 : 1;
-                return statusA - statusB;
+                
+                if (statusA !== statusB) return statusA - statusB;
+
+                const dateA = a.updated_at ? new Date(a.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + a.updated_at.split(" ")[1]) : new Date(0);
+                const dateB = b.updated_at ? new Date(b.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + b.updated_at.split(" ")[1]) : new Date(0);
+                
+                return dateB - dateA;
             });
         }
         setOrders(data);
@@ -244,7 +259,6 @@ function App() {
                    let issueStatus = null;
                    let requiereAccion = false;
 
-                   // CORRECCIÓN: Tratamos issues como objeto
                    if (isIncidence && order.issues) {
                       const issue = order.issues;
                       const { motivo } = generarMensajeIncidencia(order);
@@ -274,7 +288,7 @@ function App() {
                       {/* 3. COLUMNA CENTRAL (DIRECCIÓN o ESTADO INCIDENCIA) */}
                       <td className="p-4 align-top">
                         {!isIncidence ? (
-                          // MODO PENDIENTE: Muestra Dirección
+                          // MODO PENDIENTE
                            tieneDir ? (
                              <div className="flex items-start gap-2">
                                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="block group flex-1">
@@ -298,9 +312,8 @@ function App() {
                              </div>
                            )
                         ) : (
-                          // MODO INCIDENCIA: Estado + Motivo
+                          // MODO INCIDENCIA
                           <div className="space-y-2">
-                            {/* BADGE DE ESTADO */}
                             {requiereAccion ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
                                     <AlertTriangle className="w-3 h-3" /> REQUIERE ACCIÓN
@@ -312,7 +325,6 @@ function App() {
                                 </span>
                             )}
                             
-                            {/* MOTIVO */}
                             <div className={`border p-2 rounded-lg text-sm font-semibold shadow-sm flex items-start gap-2 ${requiereAccion ? 'bg-orange-50 border-orange-200 text-orange-900' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
                                 <span>{motivoDisplay}</span>
                             </div>
@@ -335,7 +347,7 @@ function App() {
                       {/* 5. TOTAL */}
                       <td className="p-4 align-top text-right">
                         <span className="font-bold text-green-600 text-lg bg-green-50 px-2 py-1 rounded">
-                           €{order.total_amount?.toFixed(2)}
+                           {formatearPrecio(order.total_amount)} €
                         </span>
                       </td>
 
