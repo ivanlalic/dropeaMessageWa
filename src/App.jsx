@@ -349,7 +349,7 @@ function App() {
 
                       {/* 5. TOTAL */}
                       <td className="p-4 align-top text-right">
-                        <span className="font-bold text-green-600 text-lg bg-green-50 px-2 py-1 rounded">
+                        <span className="font-bold text-green-600 text-lg bg-green-50 px-2 py-1 rounded whitespace-nowrap">
                            {formatearPrecio(order.total_amount)} €
                         </span>
                       </td>
