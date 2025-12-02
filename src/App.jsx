@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Zap, ExternalLink, AlertCircle, MapPin, AlertTriangle, PackageCheck, CheckCircle, Clock, PhoneOutgoing } from 'lucide-react';
+import { RefreshCw, Zap, ExternalLink, AlertCircle, MapPin, AlertTriangle, PackageCheck, CheckCircle, Clock, PhoneOutgoing, Filter } from 'lucide-react';
 
 // CONFIGURACIÓN DE NOMBRES
 const STORE_NAME = 'IBericaStore';
 const PRODUCT_NAME_MAP = {
   'Evilgoods_15913': 'Crema EvilGoods'
-  // Si tienes más productos con nombres largos, agrega sus SKUs aquí
+  // Agrega más aquí si necesitas
 };
 
 // DICCIONARIO DE INCIDENCIAS
@@ -21,11 +21,9 @@ const INCIDENCE_MAP = {
   'FE': 'Festivo Local o Fuerza Mayor'
 };
 
-// Función auxiliar para obtener el nombre "bonito" del producto
 const getNombreProducto = (item) => {
   const sku = item.product?.sku || '';
   const original = item.product?.name || 'Producto';
-  // Si el SKU está en el mapa, usa el nombre corto; si no, usa el original
   return PRODUCT_NAME_MAP[sku] ? PRODUCT_NAME_MAP[sku] : original;
 };
 
@@ -72,7 +70,6 @@ const generarMensajePedido = (order) => {
 const generarMensajeIncidencia = (order) => {
   const nombre = order.customer?.full_name || 'Cliente';
   
-  // CORRECCIÓN: Ahora usamos getNombreProducto aquí también
   const productos = order.items.map(item => `${getNombreProducto(item)}`).join(' | ');
   
   const total = formatearPrecio(order.total_amount);
@@ -112,6 +109,7 @@ function App() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [mostrarOcultos, setMostrarOcultos] = useState(false); // Nuevo estado para toggle
 
   const cargarPedidos = useCallback(async () => {
     setLoading(true);
@@ -131,11 +129,16 @@ function App() {
         let finalData = data;
 
         if (activeTab === 'incidence') {
-            // Filtro estricto: PENDING y CLIENT_MANAGED
-            finalData = finalData.filter(order => {
-                const status = order.issues?.status;
-                return status === 'PENDING' || status === 'CLIENT_MANAGED';
-            });
+            // LÓGICA DE FILTRADO INTELIGENTE
+            // Si mostrarOcultos es true, mostramos TODOS.
+            // Si es false (por defecto), filtramos SOLUTION_SEND.
+            if (!mostrarOcultos) {
+                finalData = finalData.filter(order => {
+                    const status = order.issues?.status;
+                    // Mostramos PENDING y CLIENT_MANAGED. Ocultamos SOLUTION_SEND.
+                    return status !== 'SOLUTION_SEND';
+                });
+            }
 
             finalData.sort((a, b) => {
                 const dateA = a.updated_at ? new Date(a.updated_at.split(" ")[0].split("-").reverse().join("-") + "T" + a.updated_at.split(" ")[1]) : new Date(0);
@@ -153,7 +156,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, [activeTab, mostrarOcultos]); // Recargar si cambia el filtro
 
   useEffect(() => {
     cargarPedidos();
@@ -182,14 +185,27 @@ function App() {
                 Gestor de Pedidos {STORE_NAME}
               </h1>
             </div>
-            <button 
-              onClick={cargarPedidos} 
-              disabled={loading}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Actualizando...' : 'Refrescar'}
-            </button>
+            <div className="flex gap-2">
+                {/* BOTÓN FILTRO (Solo en Incidencias) */}
+                {activeTab === 'incidence' && (
+                    <button 
+                        onClick={() => setMostrarOcultos(!mostrarOcultos)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors text-sm border ${mostrarOcultos ? 'bg-gray-200 text-gray-700 border-gray-300' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}
+                    >
+                        <Filter className="w-4 h-4" />
+                        {mostrarOcultos ? 'Ocultar Gestionados' : 'Ver Todo'}
+                    </button>
+                )}
+                
+                <button 
+                  onClick={cargarPedidos} 
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Actualizando...' : 'Refrescar'}
+                </button>
+            </div>
           </div>
 
           <div className="flex space-x-2 border-b border-gray-200">
@@ -246,7 +262,7 @@ function App() {
                 {orders.length === 0 && !loading && !error && (
                   <tr>
                     <td colSpan="6" className="p-8 text-center text-gray-500">
-                      {activeTab === 'pending' ? 'No hay pedidos pendientes.' : 'No hay incidencias que requieran acción.'}
+                      {activeTab === 'pending' ? 'No hay pedidos pendientes.' : '¡Todo limpio! No hay incidencias pendientes.'}
                     </td>
                   </tr>
                 )}
@@ -262,13 +278,14 @@ function App() {
                    // Lógica Incidencia
                    let motivoDisplay = null;
                    let esGestionCliente = false;
+                   let esSolucionEnviada = false;
 
                    if (isIncidence && order.issues) {
                       const issue = order.issues;
-                      // Aquí se llama a la función corregida de incidencias
                       const { motivo } = generarMensajeIncidencia(order);
                       motivoDisplay = motivo;
                       esGestionCliente = issue.status === 'CLIENT_MANAGED';
+                      esSolucionEnviada = issue.status === 'SOLUTION_SEND';
                    }
 
                    return (
@@ -318,7 +335,11 @@ function App() {
                         ) : (
                           // MODO INCIDENCIA
                           <div className="space-y-2">
-                            {esGestionCliente ? (
+                            {esSolucionEnviada ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 border border-green-200 opacity-75">
+                                    <CheckCircle className="w-3 h-3" /> SOLUCIÓN ENVIADA
+                                </span>
+                            ) : esGestionCliente ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200">
                                     <PhoneOutgoing className="w-3 h-3" /> GESTIONANDO
                                 </span>
@@ -328,7 +349,11 @@ function App() {
                                 </span>
                             )}
                             
-                            <div className={`border p-2 rounded-lg text-sm font-semibold shadow-sm flex items-start gap-2 ${esGestionCliente ? 'bg-yellow-50 border-yellow-200 text-yellow-900' : 'bg-orange-50 border-orange-200 text-orange-900'}`}>
+                            <div className={`border p-2 rounded-lg text-sm font-semibold shadow-sm flex items-start gap-2 ${
+                                esSolucionEnviada ? 'bg-gray-50 border-gray-200 text-gray-500' :
+                                esGestionCliente ? 'bg-yellow-50 border-yellow-200 text-yellow-900' : 
+                                'bg-orange-50 border-orange-200 text-orange-900'
+                            }`}>
                                 <span>{motivoDisplay}</span>
                             </div>
                           </div>
@@ -359,7 +384,11 @@ function App() {
                         {order.customer?.phone ? (
                           <button 
                             onClick={() => enviarWhatsApp(order)}
-                            className="bg-green-500 hover:bg-green-600 text-white text-sm px-4 py-3 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 w-full hover:shadow-lg"
+                            className={`text-white text-sm px-4 py-3 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 w-full hover:shadow-lg ${
+                                isIncidence && esSolucionEnviada // Si ya está solucionado, botón gris
+                                ? 'bg-gray-400 hover:bg-gray-500' 
+                                : 'bg-green-500 hover:bg-green-600'
+                            }`}
                           >
                             <ExternalLink className="w-4 h-4" /> WA {isIncidence ? 'Incidencia' : ''}
                           </button>
