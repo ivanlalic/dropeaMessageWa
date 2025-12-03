@@ -16,7 +16,6 @@ const VARIACIONES = {
   intros: ["te escribo por tu pedido", "contactamos referente a tu compra", "te hablo sobre el pedido", "vengo a confirmarte el pedido"],
   
   // TRANSICIONES NEUTRAS: Para mensaje COPIADO (Funciona con o sin respuesta del cliente)
-  // Eliminamos "Genial" o "Perfecto" para no asumir respuesta.
   transiciones: [
       "Aquí tienes los detalles del pedido", 
       "Te paso el resumen de tu compra", 
@@ -79,7 +78,7 @@ const generarMensajePedido = (order, esContinuacion = false) => {
   
   const saludo = getRandom(VARIACIONES.saludos);
   const intro = getRandom(VARIACIONES.intros);
-  const transicion = getRandom(VARIACIONES.transiciones); // Neutra: "Aquí tienes los detalles..."
+  const transicion = getRandom(VARIACIONES.transiciones); 
   const despedida = getRandom(VARIACIONES.despedidas);
   const agente = getRandom(NOMBRES_AGENTE);
 
@@ -87,11 +86,9 @@ const generarMensajePedido = (order, esContinuacion = false) => {
 
   if (esContinuacion) {
       // MODO CONTINUACIÓN (Neutro, sin asumir respuesta)
-      // Ej: "Aquí tienes los detalles del pedido número #1234..."
       msg += `${transicion} número #${order.id}.\n\n`;
   } else {
       // MODO COMPLETO (Saludo + Presentación + Datos)
-      // Ej: "Hola Javier, soy Ana. Te escribo por tu pedido..."
       msg += `${saludo} ${nombre}, soy ${agente}.\n`;
       msg += `${intro} número #${order.id}.\n\n`;
   }
@@ -205,7 +202,6 @@ function App() {
     if (modo === 'saludo') {
         datos = generarSaludoCorto(order);
     } else {
-        // Si pulsamos el botón azul de WA directo, mandamos el COMPLETO por si acaso
         datos = activeTab === 'pending' 
           ? generarMensajePedido(order, false) 
           : generarMensajeIncidencia(order, false);
@@ -218,7 +214,6 @@ function App() {
   };
 
   const copiarConfirmacion = (order) => {
-    // AQUÍ ESTÁ LA MAGIA: Pasamos 'true' para indicar que es continuación
     const datos = activeTab === 'pending' 
       ? generarMensajePedido(order, true) 
       : generarMensajeIncidencia(order, true);
@@ -312,6 +307,10 @@ function App() {
                    const { tieneDir } = generarMensajePedido(order); 
                    const isCopied = copiedId === order.id;
 
+                   // URL Google Maps para el botón
+                   const direccionBusqueda = `${order.customer?.address} ${order.customer?.city} ${order.customer?.zip}`;
+                   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccionBusqueda)}`;
+
                    return (
                     <tr key={order.id} className={`hover:bg-blue-50 transition-colors ${!isIncidence && !tieneDir ? 'bg-red-50' : ''}`}>
                       <td className="p-4 align-top">
@@ -322,13 +321,39 @@ function App() {
                         <div className="font-bold text-gray-900 text-base">{order.customer?.full_name}</div>
                         <div className="text-sm text-blue-600 font-mono mb-2">{order.customer?.phone}</div>
                       </td>
+
+                      {/* COLUMNA DIRECCIÓN / ESTADO RESTAURADA */}
                       <td className="p-4 align-top text-sm">
                         {isIncidence ? (
                             <span className="font-bold text-red-600">{order.issues?.incidence_code}</span>
                         ) : (
-                            order.customer?.city || "Sin ciudad"
+                             tieneDir ? (
+                                <div className="flex items-start gap-2">
+                                  {/* Caja Dirección + Maps */}
+                                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="block group flex-1">
+                                    <div className="bg-gray-50 border border-gray-200 rounded p-2 text-xs text-gray-600 shadow-sm group-hover:bg-blue-100 transition-all cursor-pointer h-full">
+                                        <div className="flex items-start gap-1">
+                                        <MapPin className="w-3 h-3 mt-0.5 text-gray-400 flex-shrink-0 group-hover:text-blue-600" />
+                                        <div>
+                                            <p className="font-semibold text-gray-800 group-hover:text-blue-800">{order.customer.address}</p>
+                                            <p>{order.customer.city} ({order.customer.zip})</p>
+                                        </div>
+                                        </div>
+                                    </div>
+                                  </a>
+                                  {/* Botón Distrito Postal */}
+                                  <a href="https://distritopostal.es/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center p-2 bg-white border border-gray-200 rounded hover:bg-gray-50 shadow-sm h-10 w-10 flex-shrink-0" title="Verificar Distrito Postal">
+                                    <img src="https://www.google.com/s2/favicons?domain=distritopostal.es&sz=32" alt="DP" className="w-5 h-5 opacity-70 hover:opacity-100" />
+                                  </a>
+                                </div>
+                             ) : (
+                                <div className="inline-flex items-center gap-1 px-3 py-1 rounded bg-red-100 text-red-700 border border-red-200 text-xs font-bold shadow-sm">
+                                   <AlertCircle className="w-4 h-4"/> FALTA DIRECCIÓN
+                                </div>
+                             )
                         )}
                       </td>
+
                       <td className="p-4 align-top text-sm text-gray-600">
                         {order.items.map((item, i) => (
                             <div key={i}>{item.quantity}x {getNombreProducto(item)}</div>
