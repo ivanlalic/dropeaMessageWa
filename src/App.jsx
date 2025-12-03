@@ -7,17 +7,29 @@ const PRODUCT_NAME_MAP = {
   'Evilgoods_15913': 'Crema EvilGoods'
 };
 
-// --- ESTRATEGIA ANTI-BLOQUEO (SPINTAX) ---
-// Usamos variaciones para que ningún mensaje sea idéntico al anterior
+// --- ESTRATEGIA: HUMANIZACIÓN (NOMBRES + VARIACIONES) ---
+const NOMBRES_AGENTE = ["Inés", "María", "Ana", "Laura", "Carmen"];
+
 const VARIACIONES = {
   saludos: ["Hola", "Buenas", "Saludos", "Hola qué tal", "Muy buenas"],
+  // INTROS: Para mensaje COMPLETO (cuando NO has saludado antes)
   intros: ["te escribo por tu pedido", "contactamos referente a tu compra", "te hablo sobre el pedido", "vengo a confirmarte el pedido"],
+  
+  // TRANSICIONES NEUTRAS: Para mensaje COPIADO (Funciona con o sin respuesta del cliente)
+  // Eliminamos "Genial" o "Perfecto" para no asumir respuesta.
+  transiciones: [
+      "Aquí tienes los detalles del pedido", 
+      "Te paso el resumen de tu compra", 
+      "Te confirmo los datos recibidos del pedido", 
+      "Esta es la información de tu pedido",
+      "Te dejo por aquí el resumen"
+  ],
+  
   despedidas: ["Quedo a la espera", "Cualquier cosa me dices", "Espero tu confirmación", "Avísame si todo está bien"]
 };
 
 const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-// DICCIONARIO DE INCIDENCIAS
 const INCIDENCE_MAP = {
   'AS': 'Destinatario Ausente',
   'NAM': 'No Acepta Mercancía (Rechazado)',
@@ -46,52 +58,63 @@ const formatearPrecio = (amount) => {
   return amount ? amount.toFixed(2).replace('.', ',') : '0,00';
 };
 
-// --- GENERADOR MENSAJE: SALUDO CORTO (ESTRATEGIA SEGURA) ---
+// --- GENERADORES DE MENSAJES ---
+
+// 1. SOLO SALUDO
 const generarSaludoCorto = (order) => {
-    const nombre = order.customer?.full_name?.split(' ')[0] || 'Cliente'; // Solo primer nombre para ser más natural
+    const nombre = order.customer?.full_name?.split(' ')[0] || 'Cliente'; 
     const saludo = getRandom(VARIACIONES.saludos);
-    
-    // Ej: "Hola Javier, soy de IBericaStore 👋"
-    let msg = `${saludo} ${nombre}, soy de ${STORE_NAME} 👋`;
+    const agente = getRandom(NOMBRES_AGENTE);
+    let msg = `${saludo} ${nombre}, soy ${agente} de ${STORE_NAME}.`;
     return { msg, telefono: order.customer?.phone?.replace('+', '') };
 };
 
-// --- GENERADOR MENSAJE: PEDIDO NUEVO (CON VARIACIONES) ---
-const generarMensajePedido = (order) => {
+// 2. PEDIDO (Soporta modo 'completo' o 'continuacion')
+const generarMensajePedido = (order, esContinuacion = false) => {
   const nombre = order.customer?.full_name || 'Cliente';
-  const productos = order.items.map(item => `${item.quantity} x ${getNombreProducto(item)}`).join('\n');
+  const productos = order.items.map(item => `- ${item.quantity} x ${getNombreProducto(item)}`).join('\n');
   const total = formatearPrecio(order.total_amount);
   const customer = order.customer;
   const tieneDir = !!(customer && customer.address);
   
-  // SELECCIÓN ALEATORIA DE PALABRAS
   const saludo = getRandom(VARIACIONES.saludos);
   const intro = getRandom(VARIACIONES.intros);
+  const transicion = getRandom(VARIACIONES.transiciones); // Neutra: "Aquí tienes los detalles..."
   const despedida = getRandom(VARIACIONES.despedidas);
+  const agente = getRandom(NOMBRES_AGENTE);
 
-  // CONSTRUCCIÓN DEL MENSAJE "NATURAL"
-  // Evitamos mayúsculas masivas al principio
-  let msg = `👋 ${saludo} ${nombre}, ${intro} número #${order.id}.\n\n`;
+  let msg = "";
+
+  if (esContinuacion) {
+      // MODO CONTINUACIÓN (Neutro, sin asumir respuesta)
+      // Ej: "Aquí tienes los detalles del pedido número #1234..."
+      msg += `${transicion} número #${order.id}.\n\n`;
+  } else {
+      // MODO COMPLETO (Saludo + Presentación + Datos)
+      // Ej: "Hola Javier, soy Ana. Te escribo por tu pedido..."
+      msg += `${saludo} ${nombre}, soy ${agente}.\n`;
+      msg += `${intro} número #${order.id}.\n\n`;
+  }
   
-  msg += `📦 *Resumen:*\n${productos}\n`;
-  msg += `💰 *Total:* ${total} €\n\n`; 
+  msg += `*Resumen:*\n${productos}\n`;
+  msg += `*Total:* ${total} EUR\n\n`; 
   
   if (tieneDir) {
-    msg += `📍 *Dirección de envío:*\n`;
+    msg += `*Dirección de envío:*\n`;
     msg += `${customer.address}\n`;
     msg += `${customer.city || ''} (${customer.state || ''})\n`;
     msg += `CP: ${customer.zip || ''}\n\n`;
   }
 
-  msg += "Si ves algún error en la dirección, porfa dímelo por aquí.\n\n";
-  msg += `El pedido llegará en 24/48h laborales (8:00 a 19:00). Recuerda tener el importe exacto.\n\n`;
+  msg += "Si la dirección está mal, por favor dímelo.\n\n";
+  msg += `El pedido llegará en 24/48h laborales. Importe exacto por favor.\n\n`;
   msg += `${despedida}.`;
   
   return { msg, telefono: customer?.phone?.replace('+', ''), tieneDir };
 };
 
-// --- GENERADOR MENSAJE: INCIDENCIA ---
-const generarMensajeIncidencia = (order) => {
+// 3. INCIDENCIA (Soporta modo 'completo' o 'continuacion')
+const generarMensajeIncidencia = (order, esContinuacion = false) => {
   const nombre = order.customer?.full_name || 'Cliente';
   const productos = order.items.map(item => `${getNombreProducto(item)}`).join(' | ');
   const total = formatearPrecio(order.total_amount);
@@ -105,17 +128,26 @@ const generarMensajeIncidencia = (order) => {
   }
 
   const saludo = getRandom(VARIACIONES.saludos);
+  const agente = getRandom(NOMBRES_AGENTE);
 
-  let msg = `${saludo} ${nombre}, te escribo desde *${STORE_NAME}* 📦\n\n`;
-  msg += `Ha habido un problema con la entrega: *${motivoReal}*.\n\n`;
+  let msg = "";
+
+  if (esContinuacion) {
+      // MODO CONTINUACIÓN (Neutro)
+      msg += `Te contacto porque tenemos un problema con la entrega: *${motivoReal}*.\n\n`;
+  } else {
+      // MODO COMPLETO
+      msg += `${saludo} ${nombre}, soy ${agente} de *${STORE_NAME}*.\n\n`;
+      msg += `Tenemos un problema con la entrega: *${motivoReal}*.\n\n`;
+  }
   
   if (codigo === 'RD') {
       msg += `El paquete está pendiente de recoger en la oficina de Tipsa más cercana.\n\n`;
   } else {
-      msg += `¿Me podrías confirmar cuándo te viene bien recibirlo de nuevo?\n\n`;
+      msg += `¿Cuándo te viene bien recibirlo de nuevo?\n\n`;
   }
   
-  msg += `Pedido: ${productos} (${total}€)`;
+  msg += `Pedido: ${productos} (${total} EUR)`;
 
   return { msg, telefono: order.customer?.phone?.replace('+', ''), motivo: motivoReal };
 };
@@ -126,25 +158,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [mostrarOcultos, setMostrarOcultos] = useState(false);
-  const [copiedId, setCopiedId] = useState(null); // Estado para feedback visual de copiado
-
-  // MOCK DATA PARA PRUEBAS (Descomentar para ver visualmente sin backend)
-  /*
-  useEffect(() => {
-     setOrders([{
-         id: 1234, created_at: "2023-10-25 10:00:00", total_amount: 29.90,
-         customer: { full_name: "Pepe Viyuela", phone: "34666666666", address: "Calle Falsa 123", city: "Madrid", zip: "28001" },
-         items: [{ quantity: 1, product: { name: "Shilajit" } }]
-     }]);
-  }, []);
-  */
+  const [copiedId, setCopiedId] = useState(null);
 
   const cargarPedidos = useCallback(async () => {
     setLoading(true);
     setError(null);
     setOrders([]); 
     
-    // Cambia esto por tu URL real
     const endpoint = activeTab === 'pending' ? '/api/get-orders' : '/api/get-incidences';
 
     try {
@@ -161,7 +181,6 @@ function App() {
             finalData = finalData.filter(order => order.issues?.status !== 'SOLUTION_SEND');
         }
         
-        // Ordenar por fecha
         finalData.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
         
         setOrders(finalData);
@@ -170,7 +189,7 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setError("Modo Demo: No hay conexión API real"); // Mensaje seguro para demo
+      setError("Modo Demo: No hay conexión API real");
     } finally {
       setLoading(false);
     }
@@ -180,28 +199,29 @@ function App() {
     cargarPedidos();
   }, [cargarPedidos]);
 
-  const enviarWhatsApp = (order, modo = 'completo') => {
+  const enviarWhatsApp = (order, modo) => {
     let datos;
     
     if (modo === 'saludo') {
         datos = generarSaludoCorto(order);
     } else {
+        // Si pulsamos el botón azul de WA directo, mandamos el COMPLETO por si acaso
         datos = activeTab === 'pending' 
-          ? generarMensajePedido(order) 
-          : generarMensajeIncidencia(order);
+          ? generarMensajePedido(order, false) 
+          : generarMensajeIncidencia(order, false);
     }
 
     const { msg, telefono } = datos;
-
     if (!telefono) return alert("Sin teléfono");
     const url = `https://wa.me/${telefono}?text=${encodeURIComponent(msg)}`;
     window.open(url, '_blank');
   };
 
   const copiarConfirmacion = (order) => {
+    // AQUÍ ESTÁ LA MAGIA: Pasamos 'true' para indicar que es continuación
     const datos = activeTab === 'pending' 
-      ? generarMensajePedido(order) 
-      : generarMensajeIncidencia(order);
+      ? generarMensajePedido(order, true) 
+      : generarMensajeIncidencia(order, true);
 
     navigator.clipboard.writeText(datos.msg)
       .then(() => {
@@ -221,7 +241,7 @@ function App() {
             <div>
               <h1 className="text-2xl font-bold text-blue-900 flex items-center gap-2">
                 <Zap className="text-yellow-500 fill-current" />
-                Gestor {STORE_NAME} <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full border border-green-200">Modo Anti-Ban Activo</span>
+                Gestor {STORE_NAME} <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full border border-green-200">Modo Conversacional</span>
               </h1>
             </div>
             <div className="flex gap-2">
@@ -234,7 +254,6 @@ function App() {
                         {mostrarOcultos ? 'Ocultar Gestionados' : 'Ver Todo'}
                     </button>
                 )}
-                
                 <button 
                   onClick={cargarPedidos} 
                   disabled={loading}
@@ -272,14 +291,6 @@ function App() {
           </div>
         </div>
 
-        {/* ERROR */}
-        {error && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm">
-            <p className="font-bold">Estado:</p>
-            <p>{error}</p>
-          </div>
-        )}
-
         {/* TABLA */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
           <div className="overflow-x-auto">
@@ -292,18 +303,10 @@ function App() {
                     {activeTab === 'pending' ? 'Dirección' : 'Estado'}
                   </th>
                   <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Productos</th>
-                  <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-56">Acción Segura</th>
+                  <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center w-56">Flujo Anti-Ban</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {orders.length === 0 && !loading && (
-                  <tr>
-                    <td colSpan="6" className="p-8 text-center text-gray-500">
-                      No hay datos para mostrar.
-                    </td>
-                  </tr>
-                )}
-                
                 {orders.map((order) => {
                    const isIncidence = activeTab === 'incidence';
                    const { tieneDir } = generarMensajePedido(order); 
@@ -311,20 +314,14 @@ function App() {
 
                    return (
                     <tr key={order.id} className={`hover:bg-blue-50 transition-colors ${!isIncidence && !tieneDir ? 'bg-red-50' : ''}`}>
-                      
-                      {/* 1. FECHA */}
                       <td className="p-4 align-top">
                         <span className="block text-xs font-semibold text-gray-400 mb-1">{formatearFecha(order.created_at)}</span>
                         <span className="font-bold text-gray-800 text-lg">#{order.id}</span>
                       </td>
-
-                      {/* 2. CLIENTE */}
                       <td className="p-4 align-top">
                         <div className="font-bold text-gray-900 text-base">{order.customer?.full_name}</div>
                         <div className="text-sm text-blue-600 font-mono mb-2">{order.customer?.phone}</div>
                       </td>
-
-                      {/* 3. INFO */}
                       <td className="p-4 align-top text-sm">
                         {isIncidence ? (
                             <span className="font-bold text-red-600">{order.issues?.incidence_code}</span>
@@ -332,15 +329,11 @@ function App() {
                             order.customer?.city || "Sin ciudad"
                         )}
                       </td>
-
-                      {/* 4. PRODUCTOS */}
                       <td className="p-4 align-top text-sm text-gray-600">
                         {order.items.map((item, i) => (
                             <div key={i}>{item.quantity}x {getNombreProducto(item)}</div>
                         ))}
                       </td>
-
-                      {/* 6. ACCIONES (LA CLAVE ANTI-BAN) */}
                       <td className="p-4 align-top text-center">
                         {order.customer?.phone ? (
                           <div className="flex flex-col gap-2">
@@ -356,16 +349,16 @@ function App() {
 
                              {/* PASO 2: GESTIÓN DE CONFIRMACIÓN */}
                              <div className="flex gap-1 w-full">
-                                {/* Opción A: Abrir WA Completo */}
+                                {/* Opción A: Abrir WA Completo (Botón Azul) */}
                                 <button 
                                   onClick={() => enviarWhatsApp(order, 'completo')}
                                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-2 rounded font-bold shadow transition-all flex items-center justify-center gap-1"
-                                  title="Abrir WA con todo el texto"
+                                  title="Abrir WA con mensaje COMPLETO (Si no usaste el paso 1)"
                                 >
                                   <ExternalLink className="w-3 h-3" /> WA
                                 </button>
                                 
-                                {/* Opción B: Copiar al Portapapeles (Nueva función) */}
+                                {/* Opción B: Copiar Mensaje Continuación (Botón Gris/Verde) */}
                                 <button 
                                   onClick={() => copiarConfirmacion(order)}
                                   className={`flex-1 text-xs px-2 py-2 rounded font-bold shadow transition-all flex items-center justify-center gap-1 ${
@@ -373,13 +366,12 @@ function App() {
                                       ? 'bg-green-600 text-white' 
                                       : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
                                   }`}
-                                  title="Paso 2: Copiar confirmación para pegar manual"
+                                  title="Paso 2: Copiar mensaje de CONTINUACIÓN (Sin saludo repetido)"
                                 >
                                   {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                  {isCopied ? 'Copiado' : 'Copiar'}
+                                  {isCopied ? 'Listo' : 'Copiar'}
                                 </button>
                              </div>
-
                           </div>
                         ) : (
                           <span className="text-gray-400 text-xs italic">Sin Teléfono</span>
